@@ -1,6 +1,6 @@
 import { supabase } from "./lib/supabaseClient";
 import Auth from "./components/Auth";
-
+import { fetchUserConfigs, saveFeedConfig } from "./lib/feedConfigs";
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import Select from "react-select";
@@ -10,6 +10,11 @@ import twitterIcon from "./assets/x.png";
 import youtubeIcon from "./assets/youtube.png";
 import substackIcon from "./assets/substack.png";
 import mediumIcon from "./assets/medium.png";
+import Header from "./components/Header";
+import FeedInput from "./components/FeedInput";
+import KeywordSelector from "./components/KeywordSelector";
+import SummaryCard from "./components/SummaryCard";
+
 
 async function saveFeedToSupabase({ userId, name, feeds, keywords, summaryType }) {
   const { error } = await supabase.from("feeds").insert({
@@ -98,7 +103,11 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [chapterToggles, setChapterToggles] = useState({});
   const [user, setUser] = useState(null);
-const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [savedConfigs, setSavedConfigs] = useState([]);
+  const [newSetupName, setNewSetupName] = useState("");
+
+
 console.log("🚦 App render: loading =", loading, "user =", user);
 
 
@@ -106,17 +115,28 @@ useEffect(() => {
   supabase.auth.getSession().then(({ data: { session } }) => {
     setUser(session?.user || null);
     setLoading(false);
+
+    if (session?.user) {
+      console.log("🧑 Current user ID:", session.user.id); // 👈 add this
+      fetchUserConfigs(session.user.id).then(setSavedConfigs);
+    }
   });
 
   const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
     setUser(session?.user || null);
     setLoading(false);
+
+    if (session?.user) {
+      console.log("🧑 Current user ID (listener):", session.user.id); // 👈 add this
+      fetchUserConfigs(session.user.id).then(setSavedConfigs);
+    }
   });
 
   return () => {
     listener.subscription.unsubscribe();
   };
 }, []);
+
 
 
 
@@ -318,28 +338,14 @@ if (!user) return <Auth />;
 console.log("✅ Logged in — rendering main app");
   return (
      <>
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem", padding: "0.5rem 1rem", backgroundColor: "#f9f9f9", borderRadius: "8px", border: "1px solid #ddd" }}>
-  <div style={{ fontSize: "0.95rem", color: "#111" }}>
-    Logged in as: <strong>{user.email}</strong>
-  </div>
-  <button
-    onClick={async () => {
-      await supabase.auth.signOut();
-      setUser(null);
-    }}
-    style={{
-      padding: "0.5rem 1rem",
-      backgroundColor: "#0070f3",
-      color: "#fff",
-      border: "none",
-      borderRadius: "6px",
-      cursor: "pointer",
-      fontWeight: "500"
-    }}
-  >
-    Log Out
-  </button>
-</div>
+   <Header
+  user={user}
+  onLogout={async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+  }}
+/>
+
 
     
     <div style={{ fontFamily: "system-ui", maxWidth: "720px", margin: "0 auto", padding: "1rem", backgroundColor: "#fff" }}>
@@ -348,69 +354,26 @@ console.log("✅ Logged in — rendering main app");
         <h1 style={{ fontSize: "2rem", fontWeight: 700, margin: 0, color: "#111" }}>The InkQuirer</h1>
       </div>
       <div style={{ marginBottom: "1rem" }}>
-        <label style={{ fontWeight: "bold", color: "#111" }}>Select Feeds (5 max)</label>
-        {feeds.map((feed, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
-            <img src={platformIcons[feed.platform]} alt={feed.platform} style={{ width: 20, height: 20 }} />
-            <span style={{ fontSize: "0.9rem", color: "#333", minWidth: "100px" }}>{feed.name}</span>
-            <input
-  placeholder={`Feed URL ${i + 1}`}
-  value={feed.url}
-  onChange={(e) => handleFeedUrlChange(e.target.value, i)}
-  style={{ flex: 1, padding: "0.5rem", backgroundColor: "#fff", border: "1px solid #ccc", borderRadius: "4px", color: "#111" }}
+       <FeedInput
+  feeds={feeds}
+  onAdd={handleAddFeed}
+  onRemove={handleRemoveFeed}
+  onChange={handleFeedUrlChange}
+  errorMessages={errorMessages}
+  platformIcons={platformIcons}
 />
-            <button onClick={() => handleRemoveFeed(i)} style={{ background: "#fee", color: "#a00", border: "none", cursor: "pointer", padding: "0.3rem 0.6rem" }}>x</button>
-            {errorMessages[i] && <div style={{ color: "red", marginLeft: "0.5rem" }}>{errorMessages[i]}</div>}
-          </div>
-        ))}
-        {feeds.length < 5 && (
-          <div style={{ display: "flex", gap: "1rem", marginBottom: "1rem" }}>
-            {["rss", "twitter", "youtube", "substack", "medium"].map(p => (
-  <button
-    key={p}
-    onClick={() => handleAddFeed(p)}
-    title={p}
-    style={{
-      padding: "0.5rem",
-      border: "1px solid #ccc",
-      background: "white",
-      cursor: "pointer",
-      width: "60px",
-      minHeight: "60px",
-      display: "flex",
-      flexDirection: "column",
-      justifyContent: "center",
-      alignItems: "center",
-    }}
-  >
-    <img src={platformIcons[p]} alt={p} style={{ width: 20, height: 20 }} />
-    <span
-      style={{
-        fontSize: "0.7rem",
-        marginTop: "0.3rem",
-        textAlign: "center",
-        color: "#333",
-        lineHeight: "1rem",
-      }}
-    >
-      {p === "rss" ? "RSS" : p.charAt(0).toUpperCase() + p.slice(1)}
-    </span>
-  </button>
-))}
-          </div>
-        )}
+
       </div>
 
       <div style={{ marginBottom: "1rem" }}>
-        <label style={{ fontWeight: "bold", color: "#111" }}>Select Keywords:</label>
-        <Select
-          isMulti
-          options={keywordOptions}
-          value={selectedKeywords}
-          onChange={setSelectedKeywords}
-          styles={customKeywordStyles}
-        />
-      </div>
+  <KeywordSelector
+    selectedKeywords={selectedKeywords}
+    setSelectedKeywords={setSelectedKeywords}
+    options={keywordOptions}
+    styles={customKeywordStyles}
+  />
+</div>
+
 
       <div style={{ marginBottom: "1rem" }}>
         <label style={{ fontWeight: "bold", color: "#111" }}>Summary Format:</label>
@@ -422,6 +385,94 @@ console.log("✅ Logged in — rendering main app");
   {summaryFormats.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
 </select>
       </div>
+<div style={{ marginBottom: "1rem", display: "flex", gap: "1rem" }}>
+  <select
+  onChange={e => {
+    const selected = savedConfigs.find(c => c.id === e.target.value);
+    if (!selected) return;
+    setFeeds(selected.sources.map(url => ({
+      platform: "rss",
+      url,
+      valid: true,
+      name: new URL(url).hostname
+    })));
+    setSelectedKeywords(selected.keywords.map(k => ({ label: k, value: k })));
+    setSummaryType(selected.summary_format);
+  }}
+  defaultValue=""
+  style={{
+    flex: 1,
+    padding: "0.5rem",
+    backgroundColor: "#fff",
+    color: "#111",
+    border: "1px solid #ccc",
+    borderRadius: "4px",
+    fontSize: "0.9rem",
+    appearance: "none",
+    WebkitAppearance: "none",
+    MozAppearance: "none"
+  }}
+>
+  <option value="" disabled>Load Custom Feeds...</option>
+  {savedConfigs.map(config => (
+    <option key={config.id} value={config.id}>{config.name}</option>
+  ))}
+</select>
+
+
+  <input
+  type="text"
+  placeholder="Name your custom feeds"
+  value={newSetupName}
+  onChange={e => setNewSetupName(e.target.value)}
+  style={{
+    flex: 1,
+    padding: "0.5rem",
+    backgroundColor: "#fff",
+    color: "#111",
+    border: "1px solid #ccc",
+    borderRadius: "4px"
+  }}
+/>
+
+
+<button
+  onClick={async () => {
+    if (!newSetupName.trim()) {
+      alert("Please enter a name");
+      return;
+    }
+
+    const payload = {
+      userId: user.id,
+      name: newSetupName.trim(),
+      feeds,
+      keywords: selectedKeywords,
+      summaryType
+    };
+
+    console.log("🧠 Saving feeds:", payload);
+
+    await saveFeedConfig(payload);
+
+    const updated = await fetchUserConfigs(user.id);
+    setSavedConfigs(updated);
+    console.log("📥 Saved configs now:", updated);
+    setNewSetupName(""); // clear input
+  }}
+  style={{
+    padding: "0.5rem 1rem",
+    backgroundColor: "#28a745",
+    color: "white",
+    border: "none",
+    borderRadius: "4px"
+  }}
+>
+  Save Custom Feeds
+</button>
+
+
+</div>
 
       <button onClick={fetchArticles} style={{ padding: "0.6rem 1rem", background: "#0070f3", color: "white", border: "none", cursor: "pointer" }}>
         Get My News
@@ -443,86 +494,17 @@ console.log("✅ Logged in — rendering main app");
 
       <div style={{ marginTop: "2rem" }}>
         {hasFetched && !isLoading && articles.length === 0 && <p>No articles found. Try different feeds or keywords.</p>}
-       {articles.map((article, i) => {
-   console.log("Rendering article:", article.title, article.summary);
-  console.log("Cleaned title:", cleanTitle(article.title));
-  console.log("Summary content:", article.summary);
-
-
-
-  return (
-    <div key={i} style={{ backgroundColor: "#fff", color: "#000", marginBottom: "2rem", padding: "1rem", border: "1px solid #ddd", borderRadius: "8px" }}>
-      <h3>{cleanTitle(article.title)}</h3>
-      {article.image && (
-        <img
-          src={article.image}
-          alt="Preview"
-          style={{
-            width: "100%",
-            height: "180px",
-            objectFit: "cover",
-            borderRadius: "8px",
-            marginBottom: "0.75rem",
-            backgroundColor: "#f0f0f0"
-          }}
-        />
-      )}
-      {summaryType === "bullets" ? (
-        <ul>
-          {article.summary.split(/\n|•/).map((s, j) =>
-            s.trim() ? <li key={j}>{s.replace(/^[-–•]\s*/, "").trim()}</li> : null
-          )}
-        </ul>
-      ) : (
-        <p>{article.summary}</p>
-      )}
-      {article.chaptersHtml && (
-        <>
-          <button
-            onClick={() => setChapterToggles(prev => ({ ...prev, [i]: !prev[i] }))}
-            style={{
-              marginTop: "1rem",
-              padding: "0.5rem 0.9rem",
-              backgroundColor: "#f3f4f6",
-              color: "#1f2937",
-              border: "none",
-              borderRadius: "6px",
-              fontSize: "0.95rem",
-              fontWeight: 500,
-              cursor: "pointer"
-            }}
-          >
-            {chapterToggles[i] ? "Hide Chapters" : "Show Chapters"}
-          </button>
-          {chapterToggles[i] && (
-            <div dangerouslySetInnerHTML={{ __html: article.chaptersHtml }} style={{ marginTop: "1rem" }} />
-          )}
-        </>
-      )}
-      <div
-        style={{
-          fontSize: "0.9rem",
-          color: "#666",
-          marginTop: "0.5rem",
-          display: "flex",
-          alignItems: "center",
-          gap: "0.5rem"
-        }}
-      >
-        Source: {article.feed.name}
-        <img
-          src={platformIcons[article.feed.platform]}
-          alt={article.feed.platform}
-          style={{ width: 16, height: 16 }}
-        />
-        |{" "}
-        <a href={article.link} target="_blank" rel="noopener noreferrer">
-          {article.feed.platform === "youtube" ? "Watch Video" : "Read Original"}
-        </a>
-      </div>
-    </div>
-  );
-})}
+       {articles.map((article, i) => (
+  <SummaryCard
+    key={i}
+    article={{ ...article, index: i }}
+    summaryType={summaryType}
+    platformIcons={platformIcons}
+    chapterToggles={chapterToggles}
+    setChapterToggles={setChapterToggles}
+    cleanTitle={cleanTitle}
+  />
+))}
 </div>
 </div>
 </>
