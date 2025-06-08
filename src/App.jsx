@@ -1,3 +1,6 @@
+import { supabase } from "./lib/supabaseClient";
+import Auth from "./components/Auth";
+
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import Select from "react-select";
@@ -7,6 +10,24 @@ import twitterIcon from "./assets/x.png";
 import youtubeIcon from "./assets/youtube.png";
 import substackIcon from "./assets/substack.png";
 import mediumIcon from "./assets/medium.png";
+
+async function saveFeedToSupabase({ userId, name, feeds, keywords, summaryType }) {
+  const { error } = await supabase.from("feeds").insert({
+    user_id: userId,
+    name,
+    sources: feeds.map(f => f.url),
+    keywords: keywords.map(k => k.value),
+    summary_format: summaryType
+  });
+
+  if (error) {
+    console.error("❌ Feed save failed:", error.message);
+    alert("Error saving feed.");
+  } else {
+    console.log("✅ Feed saved to Supabase");
+  }
+}
+
 
 const summaryFormats = [
   { label: "3 Bullets", value: "bullets" },
@@ -76,6 +97,28 @@ export default function App() {
   const [hasFetched, setHasFetched] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [chapterToggles, setChapterToggles] = useState({});
+  const [user, setUser] = useState(null);
+const [loading, setLoading] = useState(true);
+console.log("🚦 App render: loading =", loading, "user =", user);
+
+
+useEffect(() => {
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    setUser(session?.user || null);
+    setLoading(false);
+  });
+
+  const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    setUser(session?.user || null);
+    setLoading(false);
+  });
+
+  return () => {
+    listener.subscription.unsubscribe();
+  };
+}, []);
+
+
 
   useEffect(() => {
     const style = document.createElement("style");
@@ -88,6 +131,8 @@ export default function App() {
     document.head.appendChild(style);
     return () => document.head.removeChild(style);
   }, []);
+
+
 
   const handleAddFeed = (platform) => {
     if (feeds.length >= 5) return;
@@ -246,6 +291,16 @@ export default function App() {
 
     setArticles(newArticles);
     setIsLoading(false);
+    if (user) {
+  await saveFeedToSupabase({
+    userId: user.id,
+    name: "My Feed",
+    feeds,
+    keywords: selectedKeywords,
+    summaryType
+  });
+}
+
   };
 
   const cleanTitle = (text) => {
@@ -256,7 +311,37 @@ export default function App() {
       .replace(/[.…]+$/, "")
       .trim();
   };
+  if (loading) return <p>Loading...</p>;
+if (!user) return <Auth />;
+
+
+console.log("✅ Logged in — rendering main app");
   return (
+     <>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem", padding: "0.5rem 1rem", backgroundColor: "#f9f9f9", borderRadius: "8px", border: "1px solid #ddd" }}>
+  <div style={{ fontSize: "0.95rem", color: "#111" }}>
+    Logged in as: <strong>{user.email}</strong>
+  </div>
+  <button
+    onClick={async () => {
+      await supabase.auth.signOut();
+      setUser(null);
+    }}
+    style={{
+      padding: "0.5rem 1rem",
+      backgroundColor: "#0070f3",
+      color: "#fff",
+      border: "none",
+      borderRadius: "6px",
+      cursor: "pointer",
+      fontWeight: "500"
+    }}
+  >
+    Log Out
+  </button>
+</div>
+
+    
     <div style={{ fontFamily: "system-ui", maxWidth: "720px", margin: "0 auto", padding: "1rem", backgroundColor: "#fff" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "1.5rem" }}>
         <img src={octopusLogo} alt="Logo" style={{ width: "50px", height: "50px" }} />
@@ -353,6 +438,7 @@ export default function App() {
             animation: "spin 1s linear infinite"
           }} />
         </div>
+        
       )}
 
       <div style={{ marginTop: "2rem" }}>
@@ -361,6 +447,9 @@ export default function App() {
    console.log("Rendering article:", article.title, article.summary);
   console.log("Cleaned title:", cleanTitle(article.title));
   console.log("Summary content:", article.summary);
+
+
+
   return (
     <div key={i} style={{ backgroundColor: "#fff", color: "#000", marginBottom: "2rem", padding: "1rem", border: "1px solid #ddd", borderRadius: "8px" }}>
       <h3>{cleanTitle(article.title)}</h3>
@@ -436,5 +525,6 @@ export default function App() {
 })}
 </div>
 </div>
+</>
 );
 }
