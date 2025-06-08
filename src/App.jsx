@@ -141,34 +141,39 @@ export default function App() {
   };
 
   const summarizeWithOpenAI = async (content, style) => {
-    const promptMap = {
-      bullets: "Summarize this in 3 bullet points:",
-      paragraph: "Summarize this as a concise paragraph:",
-      simple: "Summarize this so a 5-year-old could understand it:",
-      tldr: "TL;DR:",
-      market: "What is the potential market impact of this news?",
-      opinion: "What is your opinion about this news?"
-    };
-    try {
-      const res = await axios.post(
-        "https://api.openai.com/v1/chat/completions",
-        {
-          model: "gpt-3.5-turbo",
-          messages: [{ role: "user", content: `${promptMap[style]}\n\n${content}` }],
-          temperature: 0.7
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`,
-            "Content-Type": "application/json"
-          }
-        }
-      );
-      return res.data.choices[0].message.content.trim();
-    } catch {
-      return "⚠️ Summary unavailable.";
-    }
+  const promptMap = {
+    bullets: "Summarize this in 3 bullet points:",
+    paragraph: "Summarize this as a concise paragraph:",
+    simple: "Summarize this so a 5-year-old could understand it:",
+    tldr: "TL;DR:",
+    market: "What is the potential market impact of this news?",
+    opinion: "What is your opinion about this news?"
   };
+  try {
+    const res = await axios.post(
+      "https://api.openai.com/v1/chat/completions",
+      {
+        model: "gpt-3.5-turbo",
+        messages: [{ role: "user", content: `${promptMap[style]}\n\n${content}` }],
+        temperature: 0.7
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+    console.log("OpenAI response:", res.data); // 🚨 Check full response
+    return res.data.choices[0].message.content.trim();
+    console.log("Returned summary:", res.data.choices[0].message.content.trim());
+  } catch (error) {
+    console.error("OpenAI error:", error.response?.data || error.message);
+    return "⚠️ Summary unavailable.";
+  }
+};
+
+
 
   const fetchYoutubeDescription = async (videoId) => {
     const apiKey = import.meta.env.VITE_YOUTUBE_API_KEY;
@@ -192,47 +197,52 @@ export default function App() {
     const newArticles = [];
 
     for (const feed of feeds) {
-      if (!feed.url || feed.valid === false) continue;
-      try {
-        const res = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(feed.url)}`);
-        const data = await res.json();
-        const matched = data.items.filter(item =>
-          keywordList.length === 0 || keywordList.some(kw =>
-            item.title.toLowerCase().includes(kw) || item.description.toLowerCase().includes(kw)
-          )
-        );
+  if (!feed.url || feed.valid === false) continue;
+  try {
+    const res = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(feed.url)}`);
+    const data = await res.json();
+    const matched = data.items.filter(item =>
+      keywordList.length === 0 || keywordList.some(kw =>
+        item.title.toLowerCase().includes(kw) || item.description.toLowerCase().includes(kw)
+      )
+    );
 
-        if (matched.length === 0) continue;
+    if (matched.length === 0) continue;
 
-        const article = matched[0];
-        let raw = stripHtml(article.description);
-        let chaptersHtml = "";
+    const article = matched[0];
+    console.log("Raw Article:", article); // 🚨 Check article fields
 
-        if (feed.platform === "youtube") {
-          const videoId = new URL(article.link).searchParams.get("v") || article.link.split("/").pop();
-          raw = await fetchYoutubeDescription(videoId);
-          chaptersHtml = extractChapters(raw, article.link);
-        }
+    let raw = stripHtml(article.description);
+    let chaptersHtml = "";
 
-        let image =
-          article["media:content"]?.url ||
-          article.enclosure?.link ||
-          (() => {
-            const matchDesc = article.description?.match(/<img[^>]+src=["']([^"'>]+)["']/i);
-            if (matchDesc?.[1]) return matchDesc[1];
-
-            const bgMatch = article.description?.match(/background-image:\s*url\(["']?([^"')]+)["']?\)/i);
-            if (bgMatch?.[1]) return bgMatch[1];
-
-            return platformIcons[feed.platform];
-          })();
-
-        const summary = await summarizeWithOpenAI(`${article.title}. ${raw}`, summaryType);
-        newArticles.push({ ...article, summary, feed, image, chaptersHtml });
-      } catch {
-        console.warn("Feed failed:", feed.url);
-      }
+    if (feed.platform === "youtube") {
+      const videoId = new URL(article.link).searchParams.get("v") || article.link.split("/").pop();
+      raw = await fetchYoutubeDescription(videoId);
+      chaptersHtml = extractChapters(raw, article.link);
     }
+
+    let image =
+      article["media:content"]?.url ||
+      article.enclosure?.link ||
+      (() => {
+        const matchDesc = article.description?.match(/<img[^>]+src=["']([^"'>]+)["']/i);
+        if (matchDesc?.[1]) return matchDesc[1];
+        const bgMatch = article.description?.match(/background-image:\s*url\(["']?([^"')]+)["']?\)/i);
+        if (bgMatch?.[1]) return bgMatch[1];
+        return platformIcons[feed.platform];
+      })();
+
+    const fullText = `${article.title}. ${raw}`;
+    console.log("OpenAI prompt:", `${summaryType}: ${fullText}`); // 🚨 Check OpenAI input
+
+    const summary = await summarizeWithOpenAI(fullText, summaryType);
+    newArticles.push({ ...article, summary, feed, image, chaptersHtml });
+    console.log("Final article pushed:", { ...article, summary });
+  } catch (err) {
+    console.warn("Feed failed:", feed.url, err);
+  }
+}
+
 
     setArticles(newArticles);
     setIsLoading(false);
@@ -247,23 +257,23 @@ export default function App() {
       .trim();
   };
   return (
-    <div style={{ fontFamily: "system-ui", maxWidth: "720px", margin: "0 auto", padding: "1rem" }}>
+    <div style={{ fontFamily: "system-ui", maxWidth: "720px", margin: "0 auto", padding: "1rem", backgroundColor: "#fff" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "1.5rem" }}>
         <img src={octopusLogo} alt="Logo" style={{ width: "50px", height: "50px" }} />
-        <h1 style={{ fontSize: "2rem", fontWeight: 700, margin: 0 }}>The InkQuirer</h1>
+        <h1 style={{ fontSize: "2rem", fontWeight: 700, margin: 0, color: "#111" }}>The InkQuirer</h1>
       </div>
       <div style={{ marginBottom: "1rem" }}>
-        <label style={{ fontWeight: "bold" }}>Select Feeds (5 max)</label>
+        <label style={{ fontWeight: "bold", color: "#111" }}>Select Feeds (5 max)</label>
         {feeds.map((feed, i) => (
           <div key={i} style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
             <img src={platformIcons[feed.platform]} alt={feed.platform} style={{ width: 20, height: 20 }} />
             <span style={{ fontSize: "0.9rem", color: "#333", minWidth: "100px" }}>{feed.name}</span>
             <input
-              placeholder={`Feed URL ${i + 1}`}
-              value={feed.url}
-              onChange={(e) => handleFeedUrlChange(e.target.value, i)}
-              style={{ flex: 1, padding: "0.5rem" }}
-            />
+  placeholder={`Feed URL ${i + 1}`}
+  value={feed.url}
+  onChange={(e) => handleFeedUrlChange(e.target.value, i)}
+  style={{ flex: 1, padding: "0.5rem", backgroundColor: "#fff", border: "1px solid #ccc", borderRadius: "4px", color: "#111" }}
+/>
             <button onClick={() => handleRemoveFeed(i)} style={{ background: "#fee", color: "#a00", border: "none", cursor: "pointer", padding: "0.3rem 0.6rem" }}>x</button>
             {errorMessages[i] && <div style={{ color: "red", marginLeft: "0.5rem" }}>{errorMessages[i]}</div>}
           </div>
@@ -271,19 +281,43 @@ export default function App() {
         {feeds.length < 5 && (
           <div style={{ display: "flex", gap: "1rem", marginBottom: "1rem" }}>
             {["rss", "twitter", "youtube", "substack", "medium"].map(p => (
-              <button key={p} onClick={() => handleAddFeed(p)} title={p} style={{ padding: "0.5rem", border: "1px solid #ccc", background: "white", cursor: "pointer", width: "48px", height: "48px", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center" }}>
-                <img src={platformIcons[p]} alt={p} style={{ width: 20, height: 20 }} />
-                <span style={{ fontSize: "0.7rem", marginTop: "0.2rem", textAlign: "center" }}>
-                  {p === "rss" ? "RSS" : p.charAt(0).toUpperCase() + p.slice(1)}
-                </span>
-              </button>
-            ))}
+  <button
+    key={p}
+    onClick={() => handleAddFeed(p)}
+    title={p}
+    style={{
+      padding: "0.5rem",
+      border: "1px solid #ccc",
+      background: "white",
+      cursor: "pointer",
+      width: "60px",
+      minHeight: "60px",
+      display: "flex",
+      flexDirection: "column",
+      justifyContent: "center",
+      alignItems: "center",
+    }}
+  >
+    <img src={platformIcons[p]} alt={p} style={{ width: 20, height: 20 }} />
+    <span
+      style={{
+        fontSize: "0.7rem",
+        marginTop: "0.3rem",
+        textAlign: "center",
+        color: "#333",
+        lineHeight: "1rem",
+      }}
+    >
+      {p === "rss" ? "RSS" : p.charAt(0).toUpperCase() + p.slice(1)}
+    </span>
+  </button>
+))}
           </div>
         )}
       </div>
 
       <div style={{ marginBottom: "1rem" }}>
-        <label style={{ fontWeight: "bold" }}>Select Keywords:</label>
+        <label style={{ fontWeight: "bold", color: "#111" }}>Select Keywords:</label>
         <Select
           isMulti
           options={keywordOptions}
@@ -294,10 +328,14 @@ export default function App() {
       </div>
 
       <div style={{ marginBottom: "1rem" }}>
-        <label style={{ fontWeight: "bold" }}>Summary Format:</label>
-        <select value={summaryType} onChange={e => setSummaryType(e.target.value)} style={{ width: "100%", padding: "0.5rem" }}>
-          {summaryFormats.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-        </select>
+        <label style={{ fontWeight: "bold", color: "#111" }}>Summary Format:</label>
+        <select
+  value={summaryType}
+  onChange={e => setSummaryType(e.target.value)}
+  style={{ width: "100%", padding: "0.5rem", backgroundColor: "#fff", border: "1px solid #ccc", borderRadius: "4px", color: "#111" }}
+>
+  {summaryFormats.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+</select>
       </div>
 
       <button onClick={fetchArticles} style={{ padding: "0.6rem 1rem", background: "#0070f3", color: "white", border: "none", cursor: "pointer" }}>
@@ -319,63 +357,84 @@ export default function App() {
 
       <div style={{ marginTop: "2rem" }}>
         {hasFetched && !isLoading && articles.length === 0 && <p>No articles found. Try different feeds or keywords.</p>}
-        {articles.map((article, i) => (
-          <div key={i} style={{ marginBottom: "2rem", padding: "1rem", border: "1px solid #ddd", borderRadius: "8px" }}>
-            <h3>{cleanTitle(article.title)}</h3>
-            <img
-              src={article.image}
-              alt="Preview"
-              style={{
-                width: "100%",
-                height: "180px",
-                objectFit: "cover",
-                borderRadius: "8px",
-                marginBottom: "0.75rem",
-                backgroundColor: "#f0f0f0"
-              }}
-            />
-            {summaryType === "bullets" ? (
-              <ul>
-                {article.summary.split(/\n|•/).map((s, j) =>
-                  s.trim() ? <li key={j}>{s.replace(/^[-–•]\s*/, "").trim()}</li> : null
-                )}
-              </ul>
-            ) : (
-              <p>{article.summary}</p>
-            )}
-            {article.chaptersHtml && (
-              <>
-                <button
-                  onClick={() => setChapterToggles(prev => ({ ...prev, [i]: !prev[i] }))}
-                  style={{
-                    marginTop: "1rem",
-                    padding: "0.5rem 0.9rem",
-                    backgroundColor: "#f3f4f6",
-                    color: "#1f2937",
-                    border: "none",
-                    borderRadius: "6px",
-                    fontSize: "0.95rem",
-                    fontWeight: 500,
-                    cursor: "pointer"
-                  }}
-                >
-                  {chapterToggles[i] ? "Hide Chapters" : "Show Chapters"}
-                </button>
-                {chapterToggles[i] && (
-                  <div dangerouslySetInnerHTML={{ __html: article.chaptersHtml }} style={{ marginTop: "1rem" }} />
-                )}
-              </>
-            )}
-            <div style={{ fontSize: "0.9rem", color: "#666", marginTop: "0.5rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              Source: {article.feed.name}
-              <img src={platformIcons[article.feed.platform]} alt={article.feed.platform} style={{ width: 16, height: 16 }} />
-              | <a href={article.link} target="_blank" rel="noopener noreferrer">
-                  {article.feed.platform === "youtube" ? "Watch Video" : "Read Original"}
-                </a>
-            </div>
-          </div>
-        ))}
+       {articles.map((article, i) => {
+   console.log("Rendering article:", article.title, article.summary);
+  console.log("Cleaned title:", cleanTitle(article.title));
+  console.log("Summary content:", article.summary);
+  return (
+    <div key={i} style={{ backgroundColor: "#fff", color: "#000", marginBottom: "2rem", padding: "1rem", border: "1px solid #ddd", borderRadius: "8px" }}>
+      <h3>{cleanTitle(article.title)}</h3>
+      {article.image && (
+        <img
+          src={article.image}
+          alt="Preview"
+          style={{
+            width: "100%",
+            height: "180px",
+            objectFit: "cover",
+            borderRadius: "8px",
+            marginBottom: "0.75rem",
+            backgroundColor: "#f0f0f0"
+          }}
+        />
+      )}
+      {summaryType === "bullets" ? (
+        <ul>
+          {article.summary.split(/\n|•/).map((s, j) =>
+            s.trim() ? <li key={j}>{s.replace(/^[-–•]\s*/, "").trim()}</li> : null
+          )}
+        </ul>
+      ) : (
+        <p>{article.summary}</p>
+      )}
+      {article.chaptersHtml && (
+        <>
+          <button
+            onClick={() => setChapterToggles(prev => ({ ...prev, [i]: !prev[i] }))}
+            style={{
+              marginTop: "1rem",
+              padding: "0.5rem 0.9rem",
+              backgroundColor: "#f3f4f6",
+              color: "#1f2937",
+              border: "none",
+              borderRadius: "6px",
+              fontSize: "0.95rem",
+              fontWeight: 500,
+              cursor: "pointer"
+            }}
+          >
+            {chapterToggles[i] ? "Hide Chapters" : "Show Chapters"}
+          </button>
+          {chapterToggles[i] && (
+            <div dangerouslySetInnerHTML={{ __html: article.chaptersHtml }} style={{ marginTop: "1rem" }} />
+          )}
+        </>
+      )}
+      <div
+        style={{
+          fontSize: "0.9rem",
+          color: "#666",
+          marginTop: "0.5rem",
+          display: "flex",
+          alignItems: "center",
+          gap: "0.5rem"
+        }}
+      >
+        Source: {article.feed.name}
+        <img
+          src={platformIcons[article.feed.platform]}
+          alt={article.feed.platform}
+          style={{ width: 16, height: 16 }}
+        />
+        |{" "}
+        <a href={article.link} target="_blank" rel="noopener noreferrer">
+          {article.feed.platform === "youtube" ? "Watch Video" : "Read Original"}
+        </a>
       </div>
     </div>
   );
+})}
+</div>
+</div>
+);
 }
