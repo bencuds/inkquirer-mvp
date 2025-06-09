@@ -96,7 +96,15 @@ export async function fetchArticles({
 
       const summary = await summarizeWithOpenAI(fullText, summaryType);
 
-      newArticles.push({ ...article, summary, feed, image, chaptersHtml });
+      newArticles.push({
+  ...article,
+  summary,
+  feed,
+  image,
+  chaptersHtml,
+  keywords: keywordList, // ← this adds matched keywords for display
+});
+
       console.log("✅ Article added:", article.title);
     } catch (err) {
       console.warn("❌ Feed failed:", feed.url, err);
