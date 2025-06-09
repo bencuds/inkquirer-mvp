@@ -111,15 +111,6 @@ export async function fetchArticles({
     }
   }
 
-  if (user) {
-    await saveFeedToSupabase({
-      userId: user.id,
-      name: "My Feed",
-      feeds,
-      keywords: selectedKeywords,
-      summaryType,
-    });
-  }
 
   console.log("✅ Returning articles:", newArticles.length);
   return { articles: newArticles, chapterToggles };

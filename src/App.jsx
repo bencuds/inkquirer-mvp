@@ -307,14 +307,22 @@ console.log("✅ Logged in — rendering main app");
 
 <button
   onClick={async () => {
-    if (!newSetupName.trim()) {
+    const trimmedName = newSetupName.trim();
+
+    if (!trimmedName) {
       alert("Please enter a name");
+      return;
+    }
+
+    const existingNames = savedConfigs.map(c => c.name.toLowerCase());
+    if (existingNames.includes(trimmedName.toLowerCase())) {
+      alert("You already have a feed with this name. Please choose a different one.");
       return;
     }
 
     const payload = {
       userId: user.id,
-      name: newSetupName.trim(),
+      name: trimmedName,
       feeds,
       keywords: selectedKeywords,
       summaryType
@@ -339,6 +347,7 @@ console.log("✅ Logged in — rendering main app");
 >
   Save Custom Feeds
 </button>
+
 
 
 </div>

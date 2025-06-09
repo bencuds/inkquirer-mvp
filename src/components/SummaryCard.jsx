@@ -60,14 +60,30 @@ export default function SummaryCard({
         </a>
       </h3>
 
-      <div style={{ fontSize: "0.85rem", color: "#555", marginBottom: "0.5rem" }}>
-  <img src={platformIcons[platform]} alt={platformLabel} style={{ width: 16, height: 16, marginRight: 4, verticalAlign: "middle" }} />
-  {platformLabel} &nbsp;|&nbsp;
-  📅 {date} &nbsp;|&nbsp;
-  🏷️ {article.feed.name} &nbsp;|&nbsp;
-  🔗 {keywordText} &nbsp;|&nbsp;
-  💬 {label}
+      <div style={{
+  fontSize: "0.85rem",
+  color: "#555",
+  marginBottom: "0.75rem",
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "center",
+  gap: "0.4rem",
+  lineHeight: "1.4"
+}}>
+  <span style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
+    <img src={platformIcons[platform]} alt={platformLabel} style={{ width: 16, height: 16 }} />
+    {platformLabel}
+  </span>
+  <span>|</span>
+  <span>📅 {date}</span>
+  <span>|</span>
+  <span>🏷️ {article.feed.name}</span>
+  <span>|</span>
+  <span>🔗 {keywordText}</span>
+  <span>|</span>
+  <span>💬 {label}</span>
 </div>
+
 
 
       {article.image && (
