@@ -4,6 +4,8 @@ import { fetchYoutubeDescription } from "./lib/fetchFeeds";
 import { stripHtml, extractChapters } from "./lib/utils";
 import { fetchArticles } from "./lib/fetchArticles";
 import { saveFeedToSupabase } from "./lib/feedStorage";
+import { validateFeedUrl } from "./lib/validateFeedUrl";
+import { cleanTitle } from "./lib/cleanTitle";
 import Auth from "./components/Auth";
 import { fetchUserConfigs, saveFeedConfig } from "./lib/feedConfigs";
 import React, { useState, useEffect } from "react";
@@ -152,28 +154,31 @@ useEffect(() => {
   };
 
   const handleFeedUrlChange = async (url, index) => {
-    const duplicate = feeds.some((f, i) => i !== index && f.url === url);
-    const newFeeds = [...feeds];
-    newFeeds[index].url = url;
+  const duplicate = feeds.some((f, i) => i !== index && f.url === url);
+  const newFeeds = [...feeds];
+  newFeeds[index].url = url;
+
+  setErrorMessages((prev) => ({
+    ...prev,
+    [index]: duplicate ? "This URL has already been added." : ""
+  }));
+
+  if (duplicate) return;
+
+  const { valid, name } = await validateFeedUrl(url);
+  newFeeds[index].valid = valid;
+  newFeeds[index].name = name;
+
+  if (!valid) {
     setErrorMessages((prev) => ({
       ...prev,
-      [index]: duplicate ? "This URL has already been added." : ""
+      [index]: "Invalid feed or no content found."
     }));
-    if (duplicate) return;
+  }
 
-    try {
-      const encoded = encodeURIComponent(url);
-      const res = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encoded}`);
-      const data = await res.json();
-      if (!data.items?.length) throw new Error();
-      newFeeds[index].valid = true;
-      newFeeds[index].name = data.feed?.title || new URL(url).hostname;
-    } catch {
-      newFeeds[index].valid = false;
-      setErrorMessages((prev) => ({ ...prev, [index]: "Invalid feed or no content found." }));
-    }
-    setFeeds(newFeeds);
-  };
+  setFeeds(newFeeds);
+};
+
 
 // inside your component
 const handleFetchArticles = async () => {
@@ -196,16 +201,7 @@ const handleFetchArticles = async () => {
   setIsLoading(false);
 };
 
-  const cleanTitle = (text) => {
-    return text
-      .replace(/https?:\/\/\S+/g, "")
-      .replace(/(?:^|\s)decrypt\.co\/\S+/gi, "")
-      .replace(/\bDecrypt\b[.:]?\s*/gi, "")
-      .replace(/[.…]+$/, "")
-      .trim();
-  };
-  if (loading) return <p>Loading...</p>;
-if (!user) return <Auth />;
+
 
 
 console.log("✅ Logged in — rendering main app");

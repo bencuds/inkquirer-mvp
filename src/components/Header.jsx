@@ -1,23 +1,37 @@
+// src/components/Header.jsx
+import React from "react";
+import { supabase } from "../lib/supabaseClient";
+
 export default function Header({ user, onLogout }) {
+  const email = user?.email || "Guest";
+
   return (
-    <div style={{
-      display: "flex", justifyContent: "space-between", alignItems: "center",
-      marginBottom: "1.5rem", padding: "0.5rem 1rem",
-      backgroundColor: "#f9f9f9", borderRadius: "8px", border: "1px solid #ddd"
+    <header style={{
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      padding: "1rem",
+      backgroundColor: "#f0f4f8",
+      borderBottom: "1px solid #ccc"
     }}>
-      <div style={{ fontSize: "0.95rem", color: "#111" }}>
-        Logged in as: <strong>{user.email}</strong>
+      <div style={{ fontSize: "1rem", fontWeight: "bold", color: "#333" }}>
+        Logged in as: {email}
       </div>
-      <button
-        onClick={onLogout}
-        style={{
-          padding: "0.5rem 1rem", backgroundColor: "#0070f3",
-          color: "#fff", border: "none", borderRadius: "6px", cursor: "pointer",
-          fontWeight: "500"
-        }}
-      >
-        Log Out
-      </button>
-    </div>
+      {user && (
+        <button
+          onClick={onLogout}
+          style={{
+            padding: "0.4rem 0.8rem",
+            backgroundColor: "#e53e3e",
+            color: "white",
+            border: "none",
+            borderRadius: "4px",
+            cursor: "pointer"
+          }}
+        >
+          Log Out
+        </button>
+      )}
+    </header>
   );
 }
