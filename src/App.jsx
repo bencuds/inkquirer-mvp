@@ -1,4 +1,9 @@
 import { supabase } from "./lib/supabaseClient";
+import { summarizeWithOpenAI } from "./lib/summarizer";
+import { fetchYoutubeDescription } from "./lib/fetchFeeds";
+import { stripHtml, extractChapters } from "./lib/utils";
+import { fetchArticles } from "./lib/fetchArticles";
+import { saveFeedToSupabase } from "./lib/feedStorage";
 import Auth from "./components/Auth";
 import { fetchUserConfigs, saveFeedConfig } from "./lib/feedConfigs";
 import React, { useState, useEffect } from "react";
@@ -16,23 +21,6 @@ import KeywordSelector from "./components/KeywordSelector";
 import SummaryCard from "./components/SummaryCard";
 
 
-async function saveFeedToSupabase({ userId, name, feeds, keywords, summaryType }) {
-  const { error } = await supabase.from("feeds").insert({
-    user_id: userId,
-    name,
-    sources: feeds.map(f => f.url),
-    keywords: keywords.map(k => k.value),
-    summary_format: summaryType
-  });
-
-  if (error) {
-    console.error("❌ Feed save failed:", error.message);
-    alert("Error saving feed.");
-  } else {
-    console.log("✅ Feed saved to Supabase");
-  }
-}
-
 
 const summaryFormats = [
   { label: "3 Bullets", value: "bullets" },
@@ -46,7 +34,7 @@ const summaryFormats = [
 const keywordOptions = [
   "Altcoin", "Bitcoin", "DeFi", "Depeg", "ETH", "Ethereum", "Exchange",
   "Hack", "Layer 2", "Mining", "NFT", "On-chain", "Regulation",
-  "Security", "Stablecoin", "Staking", "Tokenomics", "Wallet", "Web3"
+  "Security", "Solana", "Stablecoin", "Staking", "Tokenomics", "Wallet", "Web3"
 ].map(k => ({ label: k, value: k })).sort((a, b) => a.label.localeCompare(b.label));
 
 const customKeywordStyles = {
@@ -187,141 +175,26 @@ useEffect(() => {
     setFeeds(newFeeds);
   };
 
-  const stripHtml = (html) => {
-    const doc = new DOMParser().parseFromString(html || "", "text/html");
-    return doc.body.textContent || "";
-  };
+// inside your component
+const handleFetchArticles = async () => {
+  setHasFetched(true);
+  setIsLoading(true);
+  setArticles([]);
+  setChapterToggles({});
 
-  const extractChapters = (text, videoUrl) => {
-    const lines = text.split(/\r?\n/).map(l => l.trim());
-    const chapters = lines.filter(l => /\d{1,2}:\d{2}/.test(l)).map(line => {
-      const match = line.match(/(\d{1,2}):(\d{2})/);
-      if (!match) return null;
-      const [_, min, sec] = match;
-      const seconds = parseInt(min) * 60 + parseInt(sec);
-      const label = line.replace(match[0], "").replace(/[-–—•]*\s*/, "").trim();
-      return `<li><a href="${videoUrl}&t=${seconds}s" target="_blank">${match[0]}</a> – ${label}</li>`;
-    }).filter(Boolean).join("");
-    return chapters ? `<h4>Video Chapters:</h4><ul>${chapters}</ul>` : "";
-  };
-
-  const summarizeWithOpenAI = async (content, style) => {
-  const promptMap = {
-    bullets: "Summarize this in 3 bullet points:",
-    paragraph: "Summarize this as a concise paragraph:",
-    simple: "Summarize this so a 5-year-old could understand it:",
-    tldr: "TL;DR:",
-    market: "What is the potential market impact of this news?",
-    opinion: "What is your opinion about this news?"
-  };
-  try {
-    const res = await axios.post(
-      "https://api.openai.com/v1/chat/completions",
-      {
-        model: "gpt-3.5-turbo",
-        messages: [{ role: "user", content: `${promptMap[style]}\n\n${content}` }],
-        temperature: 0.7
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`,
-          "Content-Type": "application/json"
-        }
-      }
-    );
-    console.log("OpenAI response:", res.data); // 🚨 Check full response
-    return res.data.choices[0].message.content.trim();
-    console.log("Returned summary:", res.data.choices[0].message.content.trim());
-  } catch (error) {
-    console.error("OpenAI error:", error.response?.data || error.message);
-    return "⚠️ Summary unavailable.";
-  }
-};
-
-
-
-  const fetchYoutubeDescription = async (videoId) => {
-    const apiKey = import.meta.env.VITE_YOUTUBE_API_KEY;
-    const url = `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${apiKey}`;
-    try {
-      const res = await fetch(url);
-      const data = await res.json();
-      return data.items?.[0]?.snippet?.description || "";
-    } catch {
-      return "";
-    }
-  };
-
-  const fetchArticles = async () => {
-    setHasFetched(true);
-    setIsLoading(true);
-    setArticles([]);
-    setChapterToggles({});
-
-    const keywordList = selectedKeywords.map(k => k.value.toLowerCase());
-    const newArticles = [];
-
-    for (const feed of feeds) {
-  if (!feed.url || feed.valid === false) continue;
-  try {
-    const res = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(feed.url)}`);
-    const data = await res.json();
-    const matched = data.items.filter(item =>
-      keywordList.length === 0 || keywordList.some(kw =>
-        item.title.toLowerCase().includes(kw) || item.description.toLowerCase().includes(kw)
-      )
-    );
-
-    if (matched.length === 0) continue;
-
-    const article = matched[0];
-    console.log("Raw Article:", article); // 🚨 Check article fields
-
-    let raw = stripHtml(article.description);
-    let chaptersHtml = "";
-
-    if (feed.platform === "youtube") {
-      const videoId = new URL(article.link).searchParams.get("v") || article.link.split("/").pop();
-      raw = await fetchYoutubeDescription(videoId);
-      chaptersHtml = extractChapters(raw, article.link);
-    }
-
-    let image =
-      article["media:content"]?.url ||
-      article.enclosure?.link ||
-      (() => {
-        const matchDesc = article.description?.match(/<img[^>]+src=["']([^"'>]+)["']/i);
-        if (matchDesc?.[1]) return matchDesc[1];
-        const bgMatch = article.description?.match(/background-image:\s*url\(["']?([^"')]+)["']?\)/i);
-        if (bgMatch?.[1]) return bgMatch[1];
-        return platformIcons[feed.platform];
-      })();
-
-    const fullText = `${article.title}. ${raw}`;
-    console.log("OpenAI prompt:", `${summaryType}: ${fullText}`); // 🚨 Check OpenAI input
-
-    const summary = await summarizeWithOpenAI(fullText, summaryType);
-    newArticles.push({ ...article, summary, feed, image, chaptersHtml });
-    console.log("Final article pushed:", { ...article, summary });
-  } catch (err) {
-    console.warn("Feed failed:", feed.url, err);
-  }
-}
-
-
-    setArticles(newArticles);
-    setIsLoading(false);
-    if (user) {
-  await saveFeedToSupabase({
-    userId: user.id,
-    name: "My Feed",
+  const { articles: newArticles, chapterToggles: newToggles } = await fetchArticles({
     feeds,
-    keywords: selectedKeywords,
-    summaryType
+    selectedKeywords,
+    summaryType,
+    user,
+    saveFeedToSupabase,
+    platformIcons
   });
-}
 
-  };
+  setArticles(newArticles);
+  setChapterToggles(newToggles);
+  setIsLoading(false);
+};
 
   const cleanTitle = (text) => {
     return text
@@ -474,7 +347,7 @@ console.log("✅ Logged in — rendering main app");
 
 </div>
 
-      <button onClick={fetchArticles} style={{ padding: "0.6rem 1rem", background: "#0070f3", color: "white", border: "none", cursor: "pointer" }}>
+      <button onClick={handleFetchArticles} style={{ padding: "0.6rem 1rem", background: "#0070f3", color: "white", border: "none", cursor: "pointer" }}>
         Get My News
       </button>
 
