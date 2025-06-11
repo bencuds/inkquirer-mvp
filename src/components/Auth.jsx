@@ -13,12 +13,19 @@ export default function Auth() {
     setLoading(false)
   }
 
-  const handleSignUp = async () => {
-    setLoading(true)
-    const { error } = await supabase.auth.signUp({ email, password })
-    if (error) alert("Sign up error: " + error.message)
-    setLoading(false)
+ const handleSignUp = async () => {
+  setLoading(true);
+  const { data, error } = await supabase.auth.signUp({ email, password });
+
+  if (error) {
+    alert("Sign up error: " + error.message);
+  } else {
+    alert("✅ Success! Please check your email to confirm your address before logging in.");
   }
+
+  setLoading(false);
+};
+
 
   return (
     <div style={{ padding: "2rem", maxWidth: "400px", margin: "0 auto" }}>

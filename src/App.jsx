@@ -6,6 +6,7 @@ import { fetchArticles } from "./lib/fetchArticles";
 import { saveFeedToSupabase } from "./lib/feedStorage";
 import { validateFeedUrl } from "./lib/validateFeedUrl";
 import { cleanTitle } from "./lib/cleanTitle";
+import { generateEmailHTML } from "./lib/formatEmailHTML";
 import Auth from "./components/Auth";
 import { fetchUserConfigs, saveFeedConfig } from "./lib/feedConfigs";
 import React, { useState, useEffect } from "react";
@@ -202,6 +203,13 @@ const handleFetchArticles = async () => {
 };
 
 
+if (loading) {
+  return <p style={{ textAlign: "center", marginTop: "2rem" }}>⏳ Loading session...</p>;
+}
+
+if (!user) {
+  return <Auth />;
+}
 
 
 console.log("✅ Logged in — rendering main app");
@@ -254,103 +262,142 @@ console.log("✅ Logged in — rendering main app");
   {summaryFormats.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
 </select>
       </div>
-<div style={{ marginBottom: "1rem", display: "flex", gap: "1rem" }}>
-  <select
-  onChange={e => {
-    const selected = savedConfigs.find(c => c.id === e.target.value);
-    if (!selected) return;
-    setFeeds(selected.sources.map(url => ({
-      platform: "rss",
-      url,
-      valid: true,
-      name: new URL(url).hostname
-    })));
-    setSelectedKeywords(selected.keywords.map(k => ({ label: k, value: k })));
-    setSummaryType(selected.summary_format);
-  }}
-  defaultValue=""
-  style={{
-    flex: 1,
-    padding: "0.5rem",
-    backgroundColor: "#fff",
-    color: "#111",
-    border: "1px solid #ccc",
-    borderRadius: "4px",
-    fontSize: "0.9rem",
-    appearance: "none",
-    WebkitAppearance: "none",
-    MozAppearance: "none"
-  }}
->
-  <option value="" disabled>Load Custom Feeds...</option>
-  {savedConfigs.map(config => (
-    <option key={config.id} value={config.id}>{config.name}</option>
-  ))}
-</select>
 
+<div style={{
+  marginBottom: "1rem",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "0.75rem",
+  alignItems: "center"
+}}>
+  <select
+    onChange={e => {
+      const selected = savedConfigs.find(c => c.id === e.target.value);
+      if (!selected) return;
+      setFeeds(selected.sources.map(url => ({
+        platform: "rss",
+        url,
+        valid: true,
+        name: new URL(url).hostname
+      })));
+      setSelectedKeywords(selected.keywords.map(k => ({ label: k, value: k })));
+      setSummaryType(selected.summary_format);
+    }}
+    defaultValue=""
+    style={{
+      flex: "1 1 150px",
+      padding: "0.5rem",
+      backgroundColor: "#fff",
+      color: "#111",
+      border: "1px solid #ccc",
+      borderRadius: "4px",
+      fontSize: "0.9rem"
+    }}
+  >
+    <option value="" disabled>Load Custom Feeds...</option>
+    {savedConfigs.map(config => (
+      <option key={config.id} value={config.id}>{config.name}</option>
+    ))}
+  </select>
 
   <input
-  type="text"
-  placeholder="Name your custom feeds"
-  value={newSetupName}
-  onChange={e => setNewSetupName(e.target.value)}
-  style={{
-    flex: 1,
-    padding: "0.5rem",
-    backgroundColor: "#fff",
-    color: "#111",
-    border: "1px solid #ccc",
-    borderRadius: "4px"
-  }}
-/>
+    type="text"
+    placeholder="Name your custom feeds"
+    value={newSetupName}
+    onChange={e => setNewSetupName(e.target.value)}
+    style={{
+      flex: "1 1 150px",
+      padding: "0.5rem",
+      backgroundColor: "#fff",
+      color: "#111",
+      border: "1px solid #ccc",
+      borderRadius: "4px"
+    }}
+  />
 
+  <button
+    onClick={async () => {
+      const trimmedName = newSetupName.trim();
+      if (!trimmedName) {
+        alert("Please enter a name");
+        return;
+      }
 
-<button
-  onClick={async () => {
-    const trimmedName = newSetupName.trim();
+      const existingNames = savedConfigs.map(c => c.name.toLowerCase());
+      if (existingNames.includes(trimmedName.toLowerCase())) {
+        alert("You already have a feed with this name. Please choose a different one.");
+        return;
+      }
 
-    if (!trimmedName) {
-      alert("Please enter a name");
-      return;
-    }
+      const payload = {
+        userId: user.id,
+        name: trimmedName,
+        feeds,
+        keywords: selectedKeywords,
+        summaryType
+      };
 
-    const existingNames = savedConfigs.map(c => c.name.toLowerCase());
-    if (existingNames.includes(trimmedName.toLowerCase())) {
-      alert("You already have a feed with this name. Please choose a different one.");
-      return;
-    }
+      await saveFeedConfig(payload);
+      const updated = await fetchUserConfigs(user.id);
+      setSavedConfigs(updated);
+      setNewSetupName("");
+    }}
+    style={{
+      flex: "0 0 auto",
+      padding: "0.5rem 0.75rem",
+      backgroundColor: "#28a745",
+      color: "white",
+      border: "none",
+      borderRadius: "4px",
+      fontSize: "0.9rem"
+    }}
+  >
+    Save
+  </button>
 
-    const payload = {
-      userId: user.id,
-      name: trimmedName,
-      feeds,
-      keywords: selectedKeywords,
-      summaryType
-    };
+  <button
+    onClick={async () => {
+      if (!user?.email) {
+        alert("No email found for current user.");
+        return;
+      }
 
-    console.log("🧠 Saving feeds:", payload);
+      if (articles.length === 0) {
+        alert("No articles to send.");
+        return;
+      }
 
-    await saveFeedConfig(payload);
+      const res = await fetch("/api/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: user.email,
+          subject: "Your Crypto Digest from The InkQuirer",
+          html: generateEmailHTML(articles)
+        })
+      });
 
-    const updated = await fetchUserConfigs(user.id);
-    setSavedConfigs(updated);
-    console.log("📥 Saved configs now:", updated);
-    setNewSetupName(""); // clear input
-  }}
-  style={{
-    padding: "0.5rem 1rem",
-    backgroundColor: "#28a745",
-    color: "white",
-    border: "none",
-    borderRadius: "4px"
-  }}
->
-  Save Custom Feeds
-</button>
-
-
-
+      const result = await res.json();
+      if (result.success) {
+        alert("📬 Email sent successfully!");
+      } else {
+        alert("❌ Failed to send email.");
+      }
+    }}
+    style={{
+      flex: "0 0 auto",
+      padding: "0.5rem 0.75rem",
+      backgroundColor: "#0070f3",
+      color: "white",
+      border: "none",
+      borderRadius: "4px",
+      fontSize: "0.9rem"
+    }}
+  >
+    Email
+  </button>
 </div>
+
 
       <button onClick={handleFetchArticles} style={{ padding: "0.6rem 1rem", background: "#0070f3", color: "white", border: "none", cursor: "pointer" }}>
         Get My News
