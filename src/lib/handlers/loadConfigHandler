@@ -1,0 +1,19 @@
+export function handleLoadConfig(configId, savedConfigs, setFeeds, setSelectedKeywords, setSummaryType) {
+  const selected = savedConfigs.find(c => c.id === configId);
+  if (!selected) return;
+
+  setFeeds(
+    selected.sources.map(url => ({
+      platform: "rss",
+      url,
+      valid: true,
+      name: new URL(url).hostname
+    }))
+  );
+
+  setSelectedKeywords(
+    selected.keywords.map(k => ({ label: k, value: k }))
+  );
+
+  setSummaryType(selected.summary_format);
+}

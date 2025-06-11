@@ -9,6 +9,10 @@ import { cleanTitle } from "./lib/cleanTitle";
 import { generateEmailHTML } from "./lib/formatEmailHTML";
 import { handleAddFeed, handleRemoveFeed, handleFeedUrlChange } from "./lib/handlers/feedHandlers";
 import { handleFetchArticles } from "./lib/handlers/articleHandlers";
+import { handleSendEmail } from "./lib/handlers/emailHandlers";
+import { handleSaveConfig } from "./lib/handlers/configHandlers";
+import { handleLoadConfig } from "./lib/handlers/loadConfigHandler";
+import { useSupabaseAuth } from "./hooks/useSupabaseAuth";
 import Auth from "./components/Auth";
 import { fetchUserConfigs, saveFeedConfig } from "./lib/feedConfigs";
 import React, { useState, useEffect } from "react";
@@ -95,42 +99,11 @@ export default function App() {
   const [hasFetched, setHasFetched] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [chapterToggles, setChapterToggles] = useState({});
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [savedConfigs, setSavedConfigs] = useState([]);
+  const { user, loading, savedConfigs, setUser, setSavedConfigs } = useSupabaseAuth();
   const [newSetupName, setNewSetupName] = useState("");
 
 
 console.log("🚦 App render: loading =", loading, "user =", user);
-
-
-useEffect(() => {
-  supabase.auth.getSession().then(({ data: { session } }) => {
-    setUser(session?.user || null);
-    setLoading(false);
-
-    if (session?.user) {
-      console.log("🧑 Current user ID:", session.user.id); // 👈 add this
-      fetchUserConfigs(session.user.id).then(setSavedConfigs);
-    }
-  });
-
-  const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-    setUser(session?.user || null);
-    setLoading(false);
-
-    if (session?.user) {
-      console.log("🧑 Current user ID (listener):", session.user.id); // 👈 add this
-      fetchUserConfigs(session.user.id).then(setSavedConfigs);
-    }
-  });
-
-  return () => {
-    listener.subscription.unsubscribe();
-  };
-}, []);
-
-
 
 
   useEffect(() => {
@@ -274,34 +247,24 @@ console.log("✅ Logged in — rendering main app");
   alignItems: "center"
 }}>
   <select
-    onChange={e => {
-      const selected = savedConfigs.find(c => c.id === e.target.value);
-      if (!selected) return;
-      setFeeds(selected.sources.map(url => ({
-        platform: "rss",
-        url,
-        valid: true,
-        name: new URL(url).hostname
-      })));
-      setSelectedKeywords(selected.keywords.map(k => ({ label: k, value: k })));
-      setSummaryType(selected.summary_format);
-    }}
-    defaultValue=""
-    style={{
-      flex: "1 1 150px",
-      padding: "0.5rem",
-      backgroundColor: "#fff",
-      color: "#111",
-      border: "1px solid #ccc",
-      borderRadius: "4px",
-      fontSize: "0.9rem"
-    }}
-  >
-    <option value="" disabled>Load Custom Feeds...</option>
-    {savedConfigs.map(config => (
-      <option key={config.id} value={config.id}>{config.name}</option>
-    ))}
-  </select>
+  onChange={e => handleLoadConfig(e.target.value, savedConfigs, setFeeds, setSelectedKeywords, setSummaryType)}
+  defaultValue=""
+  style={{
+    flex: "1 1 150px",
+    padding: "0.5rem",
+    backgroundColor: "#fff",
+    color: "#111",
+    border: "1px solid #ccc",
+    borderRadius: "4px",
+    fontSize: "0.9rem"
+  }}
+>
+  <option value="" disabled>Load Custom Feeds...</option>
+  {savedConfigs.map(config => (
+    <option key={config.id} value={config.id}>{config.name}</option>
+  ))}
+</select>
+
 
   <input
     type="text"
@@ -319,44 +282,31 @@ console.log("✅ Logged in — rendering main app");
   />
 
   <button
-    onClick={async () => {
-      const trimmedName = newSetupName.trim();
-      if (!trimmedName) {
-        alert("Please enter a name");
-        return;
-      }
+  onClick={() =>
+    handleSaveConfig({
+      user,
+      feeds,
+      selectedKeywords,
+      summaryType,
+      newSetupName,
+      savedConfigs,
+      setSavedConfigs,
+      setNewSetupName
+    })
+  }
+  style={{
+    flex: "0 0 auto",
+    padding: "0.5rem 0.75rem",
+    backgroundColor: "#28a745",
+    color: "white",
+    border: "none",
+    borderRadius: "4px",
+    fontSize: "0.9rem"
+  }}
+>
+  Save
+</button>
 
-      const existingNames = savedConfigs.map(c => c.name.toLowerCase());
-      if (existingNames.includes(trimmedName.toLowerCase())) {
-        alert("You already have a feed with this name. Please choose a different one.");
-        return;
-      }
-
-      const payload = {
-        userId: user.id,
-        name: trimmedName,
-        feeds,
-        keywords: selectedKeywords,
-        summaryType
-      };
-
-      await saveFeedConfig(payload);
-      const updated = await fetchUserConfigs(user.id);
-      setSavedConfigs(updated);
-      setNewSetupName("");
-    }}
-    style={{
-      flex: "0 0 auto",
-      padding: "0.5rem 0.75rem",
-      backgroundColor: "#28a745",
-      color: "white",
-      border: "none",
-      borderRadius: "4px",
-      fontSize: "0.9rem"
-    }}
-  >
-    Save
-  </button>
 
   <button
     onClick={() =>
@@ -387,46 +337,19 @@ console.log("✅ Logged in — rendering main app");
   </button>
 
   <button
-    onClick={async () => {
-      if (!user?.email) {
-        alert("No email found for current user.");
-        return;
-      }
-
-      if (articles.length === 0) {
-        alert("No articles to send.");
-        return;
-      }
-
-      const res = await fetch("/api/send-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          to: user.email,
-          subject: "Your Crypto Digest from The InkQuirer",
-          html: generateEmailHTML(articles)
-        })
-      });
-
-      const result = await res.json();
-      if (result.success) {
-        alert("📬 Email sent successfully!");
-      } else {
-        alert("❌ Failed to send email.");
-      }
-    }}
-    style={{
-      flex: "0 0 auto",
-      padding: "0.5rem 0.75rem",
-      backgroundColor: "#6c63ff",
-      color: "white",
-      border: "none",
-      borderRadius: "4px",
-      fontSize: "0.9rem"
-    }}
-  >
-    Email
-  </button>
+  onClick={() => handleSendEmail({ user, articles })}
+  style={{
+    flex: "0 0 auto",
+    padding: "0.5rem 0.75rem",
+    backgroundColor: "#6c63ff",
+    color: "white",
+    border: "none",
+    borderRadius: "4px",
+    fontSize: "0.9rem"
+  }}
+>
+  Email
+</button>
 </div>
 
 
