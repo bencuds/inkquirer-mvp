@@ -7,6 +7,8 @@ import { saveFeedToSupabase } from "./lib/feedStorage";
 import { validateFeedUrl } from "./lib/validateFeedUrl";
 import { cleanTitle } from "./lib/cleanTitle";
 import { generateEmailHTML } from "./lib/formatEmailHTML";
+import { handleAddFeed, handleRemoveFeed, handleFeedUrlChange } from "./lib/handlers/feedHandlers";
+import { handleFetchArticles } from "./lib/handlers/articleHandlers";
 import Auth from "./components/Auth";
 import { fetchUserConfigs, saveFeedConfig } from "./lib/feedConfigs";
 import React, { useState, useEffect } from "react";
@@ -233,12 +235,13 @@ console.log("✅ Logged in — rendering main app");
       <div style={{ marginBottom: "1rem" }}>
        <FeedInput
   feeds={feeds}
-  onAdd={handleAddFeed}
-  onRemove={handleRemoveFeed}
-  onChange={handleFeedUrlChange}
+  onAdd={() => handleAddFeed(feeds, setFeeds)}
+  onRemove={(index) => handleRemoveFeed(index, feeds, setFeeds)}
+  onChange={(url, index) => handleFeedUrlChange(url, index, feeds, setFeeds, setErrorMessages)}
   errorMessages={errorMessages}
   platformIcons={platformIcons}
 />
+
 
       </div>
 
@@ -356,6 +359,34 @@ console.log("✅ Logged in — rendering main app");
   </button>
 
   <button
+    onClick={() =>
+      handleFetchArticles({
+        feeds,
+        selectedKeywords,
+        summaryType,
+        user,
+        setIsLoading,
+        setArticles,
+        setHasFetched,
+        setChapterToggles,
+        platformIcons
+      })
+    }
+    style={{
+      flex: "0 0 auto",
+      padding: "0.6rem 1rem",
+      background: "#0070f3",
+      color: "white",
+      border: "none",
+      borderRadius: "4px",
+      fontSize: "0.9rem",
+      cursor: "pointer"
+    }}
+  >
+    Get My News
+  </button>
+
+  <button
     onClick={async () => {
       if (!user?.email) {
         alert("No email found for current user.");
@@ -387,7 +418,7 @@ console.log("✅ Logged in — rendering main app");
     style={{
       flex: "0 0 auto",
       padding: "0.5rem 0.75rem",
-      backgroundColor: "#0070f3",
+      backgroundColor: "#6c63ff",
       color: "white",
       border: "none",
       borderRadius: "4px",
@@ -399,9 +430,7 @@ console.log("✅ Logged in — rendering main app");
 </div>
 
 
-      <button onClick={handleFetchArticles} style={{ padding: "0.6rem 1rem", background: "#0070f3", color: "white", border: "none", cursor: "pointer" }}>
-        Get My News
-      </button>
+     
 
       {isLoading && (
         <div style={{ display: "flex", justifyContent: "center", margin: "2rem 0" }}>
