@@ -1,0 +1,14 @@
+name: Send Daily Digest
+
+on:
+  schedule:
+    - cron: '0 8 * * *'  # Every day at 8 AM UTC (adjust as needed)
+  workflow_dispatch:      # Allow manual trigger
+
+jobs:
+  call-supabase-function:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call Supabase Edge Function
+        run: |
+          curl -X POST https://9af1e384-0593-4c8b-869f-1b531ca03bb5.functions.supabase.co/send-digest
