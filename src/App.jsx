@@ -102,6 +102,7 @@ export default function App() {
   const { user, loading, savedConfigs, setUser, setSavedConfigs } = useSupabaseAuth();
   const [newSetupName, setNewSetupName] = useState("");
 
+console.log("Feed platforms:", feeds.map(f => f.platform));
 
 console.log("🚦 App render: loading =", loading, "user =", user);
 
@@ -208,7 +209,7 @@ console.log("✅ Logged in — rendering main app");
       <div style={{ marginBottom: "1rem" }}>
        <FeedInput
   feeds={feeds}
-  onAdd={() => handleAddFeed(feeds, setFeeds)}
+  onAdd={handleAddFeed}
   onRemove={(index) => handleRemoveFeed(index, feeds, setFeeds)}
   onChange={(url, index) => handleFeedUrlChange(url, index, feeds, setFeeds, setErrorMessages)}
   errorMessages={errorMessages}
