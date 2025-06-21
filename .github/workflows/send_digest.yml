@@ -3,6 +3,8 @@ name: Daily Digest Scheduler
 on:
   schedule:
     - cron: "0 8 * * *"  # Every day at 08:00 UTC
+  workflow_dispatch:    # Allow manual trigger
+
 
 jobs:
   send-digest:
