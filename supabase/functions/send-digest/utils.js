@@ -1,7 +1,7 @@
 export function stripHtml(html) {
-  const doc = new DOMParser().parseFromString(html || "", "text/html");
-  return doc.body.textContent || "";
+  return html.replace(/<[^>]*>?/gm, "").trim();
 }
+
 
 export function extractChapters(text, videoUrl) {
   const lines = text.split(/\r?\n/).map(l => l.trim());
