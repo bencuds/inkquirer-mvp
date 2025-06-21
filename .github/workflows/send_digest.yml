@@ -15,6 +15,12 @@ jobs:
         with:
           version: latest
 
+      # Deploy the function
       - run: supabase functions deploy send-digest --project-ref asxslhpisdqkggjargfm --no-verify-jwt
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      # Invoke the function after deploy (so you will see logs!)
+      - run: supabase functions invoke send-digest --project-ref asxslhpisdqkggjargfm --no-verify-jwt
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
