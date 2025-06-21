@@ -20,7 +20,7 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
-      # Invoke the function after deploy (so you will see logs!)
-      - run: supabase functions invoke send-digest --project-ref asxslhpisdqkggjargfm --no-verify-jwt
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      # Invoke function via HTTPS POST
+      - name: Invoke send-digest
+        run: |
+          curl -X POST https://asxslhpisdqkggjargfm.functions.supabase.co/send-digest
